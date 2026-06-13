@@ -62,15 +62,15 @@ three consumers: `MJPEGStreamer` (live streaming), `VideoWriter` (PyAV recording
 
 Key extension points the design depends on — preserve these when implementing:
 
-- **`FrameAnalyzer` (abstract, Template Method)** — `MotionDetector` (Phase 2/3, OpenCV MOG2) and
-  `AIAnalyzer` (Phase 4, YOLO) both subclass it. `EventService` consumes `AnalysisResult` and does
+- **`FrameAnalyzer` (abstract, Template Method)** — `MotionDetector` (Phase 3, OpenCV MOG2) and
+  `AIAnalyzer` (Phase 5, YOLO) both subclass it. `EventService` consumes `AnalysisResult` and does
   not care which analyzer produced it.
 - **`NotificationStrategy` (abstract, Strategy Pattern)** — `TelegramNotifier`, `DiscordNotifier`.
   Adding a notification channel means adding one class, not touching `EventService`.
 - **`EventService` (Facade)** — coordinates event creation, `EventRecorder` (pre/post-event ring
   buffer clipping), notifications, and `WebSocketManager` broadcast to the frontend.
 - **Repository Pattern** — `CameraRepository` / `EventRepository` isolate SQLAlchemy data access.
-- **`CameraManager` (Facade, Phase 4)** — owns the lifecycle of multiple `VideoPipeline`s and their
+- **`CameraManager` (Facade, Phase 5)** — owns the lifecycle of multiple `VideoPipeline`s and their
   `ReconnectionManager`s.
 
 Request flow: browser → Caddy (`:80`/`:443`) → Vue frontend (static) or FastAPI; Caddy also serves
@@ -82,5 +82,3 @@ running `VideoPipeline` dynamically.
 - `docker-compose.yaml` mounts the frontend from `./web-submodule/dist`, but the submodule is
   actually at `web` (per `.gitmodules`). Verify/reconcile this path before relying on the Caddy
   static mount.
-- Docs note the stack as Postgres 18 (`docs/proposal.md`) while `docker-compose.yaml` pins
-  `postgres:15-alpine`.

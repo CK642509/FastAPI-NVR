@@ -4,9 +4,9 @@
 
 ---
 
-## 階段 1：POC（MJPEG 串流 + 錄影控制）
+## Phase 1：Core（後端基礎錄影管線）
 
-> 核心職責：從攝影機讀取影像幀，分發給串流模組與錄影模組，並透過 FastAPI 提供控制介面。
+> 核心職責：從攝影機讀取影像幀並持續分段錄影，作為後續所有功能的基礎。無前端介面、無串流，僅透過 `.env` 設定影像來源。
 
 ```mermaid
 classDiagram
@@ -20,17 +20,10 @@ classDiagram
     class VideoPipeline {
         -camera: Camera
         -running: bool
-        -streamer: MJPEGStreamer
         -writer: VideoWriter
         +start()
         +stop()
         -_capture_loop()
-    }
-
-    class MJPEGStreamer {
-        -frame_queue: asyncio.Queue
-        +push_frame(frame: bytes)
-        +generate() AsyncGenerator
     }
 
     class VideoWriter {
@@ -39,6 +32,28 @@ classDiagram
         +open(path: str)
         +write(frame: ndarray)
         +close()
+    }
+
+    VideoPipeline *-- Camera
+    VideoPipeline *-- VideoWriter
+```
+
+**設計說明：**
+- `VideoPipeline` 是核心協調者，持有 `Camera` 資訊，於擷取迴圈中將影像幀寫入 `VideoWriter`。
+- `VideoWriter` 封裝 PyAV 的開檔、寫幀、關檔操作，並負責分段 mp4 輸出。
+
+---
+
+## Phase 2：POC（MJPEG 串流 + 錄影控制 + 前端）
+
+> 核心職責：在 Phase 1 的錄影管線上，加入 MJPEG 即時串流與 FastAPI 控制介面，搭配 Vue3 前端與容器化部署。
+
+```mermaid
+classDiagram
+    class MJPEGStreamer {
+        -frame_queue: asyncio.Queue
+        +push_frame(frame: bytes)
+        +generate() AsyncGenerator
     }
 
     class StreamRouter {
@@ -52,22 +67,20 @@ classDiagram
         +status(camera_id: int) RecordingStatus
     }
 
-    VideoPipeline *-- Camera
-    VideoPipeline *-- MJPEGStreamer
-    VideoPipeline *-- VideoWriter
+    VideoPipeline *-- MJPEGStreamer : 新增串流分支
     StreamRouter --> VideoPipeline : 取得串流
     StreamRouter --> MJPEGStreamer : 取得 MJPEG 回應
     RecordingRouter --> VideoPipeline : 控制錄影
 ```
 
 **設計說明：**
-- `VideoPipeline` 是核心協調者，持有 `Camera` 資訊，並將影像幀分發給 `MJPEGStreamer` 和 `VideoWriter`。
+- `VideoPipeline` 於本階段新增 `MJPEGStreamer` 分支，將影像幀同時分發給串流與錄影模組。
 - `MJPEGStreamer` 使用非同步佇列，使 HTTP streaming response 不阻塞主執行緒。
-- `VideoWriter` 封裝 PyAV 的開檔、寫幀、關檔操作。
+- `StreamRouter` / `RecordingRouter` 提供串流與錄影開關的 FastAPI 控制介面，供 Vue3 前端呼叫。
 
 ---
 
-## 階段 2：影像分析 + 事件系統 + 通知系統
+## Phase 3：影像分析 + 事件系統 + 通知系統
 
 > 核心職責：對影像幀進行分析，偵測異常後建立事件、觸發事件錄影，並透過多管道發送通知，同時推播至前端。
 
@@ -152,14 +165,14 @@ classDiagram
 ```
 
 **設計說明：**
-- `FrameAnalyzer` 為抽象類別，採用 **Template Method**，階段 4 的 AI 分析器只需繼承並實作 `analyze()`。
+- `FrameAnalyzer` 為抽象類別，採用 **Template Method**，Phase 5 的 AI 分析器只需繼承並實作 `analyze()`。
 - `NotificationStrategy` 採用 **Strategy Pattern**，可動態增減通知管道。
 - `EventRecorder` 維護一個滾動的前置緩衝區（deque），事件觸發後補錄後置片段，再合併輸出完整短片。
 - `EventService` 作為**門面（Facade）**，協調事件建立、通知發送、WebSocket 推播。
 
 ---
 
-## 階段 3：事件搜尋 + 攝影機設定管理 + 重試機制
+## Phase 4：MVP（事件搜尋 + 攝影機設定管理 + 重試機制）
 
 > 核心職責：系統化管理攝影機設定與事件資料，提供搜尋 API，並以 exponential backoff 應對影像源中斷。
 
@@ -236,7 +249,7 @@ classDiagram
 
 ---
 
-## 階段 4：AI 分析 + 多攝影機 + WebRTC
+## Phase 5：AI 分析 + 多攝影機 + WebRTC
 
 > 核心職責：以 AI 模型強化分析能力，統一管理多路攝影機生命週期，並提供 WebRTC 低延遲串流。
 
@@ -297,7 +310,7 @@ classDiagram
 
 ---
 
-## 完整系統類別圖（階段 4 累積）
+## 完整系統類別圖（Phase 5 累積）
 
 ```mermaid
 classDiagram
