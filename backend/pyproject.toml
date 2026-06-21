@@ -1,0 +1,16 @@
+[project]
+name = "fastapi-nvr-backend"
+version = "0.1.0"
+description = "FastAPI-NVR backend — Phase 1: capture + segmented recording"
+requires-python = ">=3.12"
+dependencies = [
+    "av>=12.0.0",
+    "opencv-python-headless>=4.9.0",
+    "numpy>=1.26",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+]
+
+# 這是應用程式（非要發佈的套件），不需把專案自身建成 wheel 安裝。
+[tool.uv]
+package = false
