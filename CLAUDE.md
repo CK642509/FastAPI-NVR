@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-This is an **early-stage / pre-implementation** project. The committed backend files
-(`backend/main.py`, `backend/Dockerfile`, `caddy/Caddyfile`) are empty placeholders — the
-actual code has not been written yet. The authoritative spec for what to build lives in `docs/`:
+**Phase 1 (Core — capture + segmented recording) is implemented.** Phases 2–5 are not yet
+started; `caddy/Caddyfile` is still an empty placeholder. The authoritative spec for what to
+build lives in `docs/`:
 
 - `docs/proposal.md` — the proposal: tech stack table, system architecture diagram, and the
   dated Phase 1–5 timeline.
@@ -17,6 +17,34 @@ actual code has not been written yet. The authoritative spec for what to build l
 
 When implementing a feature, find its phase in `docs/ooa.md` first — the class structure,
 abstract base classes, and design patterns are already specified there.
+
+### Backend (Phase 1)
+
+The backend is a **pure-asyncio app** (no FastAPI/API yet — that arrives in Phase 2). Code lives
+in `backend/app/`, following the Phase 1 design contract (`Camera` / `VideoPipeline` /
+`VideoWriter`):
+
+- `app/config.py` — Pydantic v2 `Settings`, all config via `.env` (see `backend/.env.example`).
+- `app/camera.py` — `Camera` dataclass.
+- `app/sources.py` — `FrameSource` protocol + `OpenCVSource` (webcam / RTSP / video file, via
+  `cv2.VideoCapture`) + `SyntheticSource` (generated frames, for testing without a camera).
+- `app/video_writer.py` — `VideoWriter`, PyAV → H.264 mp4.
+- `app/pipeline.py` — `VideoPipeline`, capture loop + segmentation (segment boundary by frame
+  count = `fps × segment_seconds`).
+- `app/main.py` — asyncio entry point; the blocking capture loop runs in a `ThreadPoolExecutor`
+  (cv2/PyAV are synchronous), with SIGINT/SIGTERM graceful shutdown.
+
+Dependencies are managed with **uv** (`pyproject.toml` + `uv.lock`). `CAMERA_URL` selects the
+source: a digit (`0`) = webcam index, `rtsp://…` = RTSP, a path = video file (loops if
+`CAMERA_LOOP`), `synthetic` = generated frames. Recordings default to `recordings/` (→ container
+`/app/recordings` → host `storage/recordings`).
+
+Run Phase 1 locally:
+```powershell
+cd backend
+copy .env.example .env   # defaults to CAMERA_URL=synthetic (no camera needed)
+uv run python -m app.main # Ctrl+C to stop
+```
 
 ## Repository layout
 
