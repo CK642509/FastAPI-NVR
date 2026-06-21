@@ -63,6 +63,27 @@ copy .env.example .env
 | `C:\path\to\video.mp4` | 本機影片檔（可搭配 `CAMERA_LOOP` 循環） |
 | `synthetic` | 內建合成影像（**免攝影機**即可測試整條管線） |
 
+### ⚠️ Webcam 與容器
+
+`CAMERA_URL=0`（USB webcam）**在容器中能否使用，取決於宿主 OS**：
+
+- **Windows / macOS（Docker Desktop）**：容器跑在 Linux VM 內，**無法 USB 直通**——
+  這不是權限設定問題，怎麼設都拿不到攝影機。請改用以下其一：
+  - 開發 webcam 時**原生執行後端**（`uv run python -m app.main`），不要走容器；
+  - 容器內改用 `rtsp://...` / 影片檔 / `synthetic` 來源。
+- **Linux 主機**：容器**可以**存取 USB 攝影機，但需在 compose 為 `api-server` 開啟 device
+  直通（預設已註解，見根目錄 `docker-compose.yaml`）：
+
+  ```yaml
+  devices:
+    - /dev/video0:/dev/video0    # 換成實際裝置；查法 ls /dev/video*
+  group_add:
+    - video                      # 或填宿主 video 群組 GID：getent group video
+  ```
+
+來源開啟失敗（含容器內取不到 webcam）時，後端會記錄明確的 ERROR 日誌，App 仍持續運作
+（API 可回應，只是無畫面、snapshot 回 503），方便排查。
+
 ---
 
 ## 資料庫 schema（Alembic migration）

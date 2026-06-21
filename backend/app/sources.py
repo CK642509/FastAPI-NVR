@@ -54,7 +54,12 @@ class OpenCVSource:
         source = self._resolve(self._raw)
         cap = cv2.VideoCapture(source)
         if not cap.isOpened():
-            raise RuntimeError(f"無法開啟影像來源: {self._raw!r}")
+            hint = ""
+            if isinstance(source, int):
+                # webcam 索引：容器內通常拿不到（Docker Desktop 無法 USB 直通；
+                # Linux 需 compose 加 device 直通）。見 backend/README.md。
+                hint = "（webcam 索引：容器內通常無法存取 USB 攝影機，詳見 README）"
+            raise RuntimeError(f"無法開啟影像來源 {self._raw!r}{hint}")
         self._cap = cap
 
         src_fps = cap.get(cv2.CAP_PROP_FPS)

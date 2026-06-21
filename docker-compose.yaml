@@ -31,6 +31,16 @@ services:
       db:
         condition: service_healthy
     restart: always
+    # ── USB webcam（CAMERA_URL=0 之類）────────────────────────────────
+    # 僅 Linux 主機可用：取消下列註解把宿主的攝影機裝置直通進容器，
+    # 並視情況把 0 換成實際的 /dev/videoN，group_add 換成宿主 video 群組 GID
+    # （查法：getent group video）。
+    # Windows / macOS 的 Docker Desktop 無法 USB 直通，請改用原生執行後端
+    # （uv run）跑 webcam，容器內則用 RTSP / 影片檔 / synthetic。詳見 backend/README.md。
+    # devices:
+    #   - /dev/video0:/dev/video0
+    # group_add:
+    #   - video
 
   # 資料庫
   db:

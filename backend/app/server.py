@@ -72,6 +72,21 @@ async def lifespan(app: FastAPI):
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="capture")
     capture_future = loop.run_in_executor(executor, pipeline.start)
 
+    def _on_capture_done(fut) -> None:
+        # 擷取執行緒提早結束（例如來源開啟失敗：容器內無 webcam、RTSP 連不上）時，
+        # 立即把錯誤記錄出來，而不是被吞到關機才浮現。App 仍持續運作（API 可用，
+        # 只是沒有畫面），方便除錯。
+        if fut.cancelled():
+            return
+        exc = fut.exception()
+        if exc is not None:
+            logger.error(
+                "擷取執行緒結束，串流/錄影已停止（來源=%s）：%s",
+                settings.camera_url, exc,
+            )
+
+    capture_future.add_done_callback(_on_capture_done)
+
     app.state.pipelines = {camera.id: pipeline}
     app.state.capture_future = capture_future
     logger.info(

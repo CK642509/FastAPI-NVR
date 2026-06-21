@@ -124,3 +124,8 @@ running `VideoPipeline` dynamically.
   compose; keep it that way.
 - DB migrations are **not** auto-run by the container; apply them manually with
   `uv run alembic upgrade head` after the `db` service is healthy.
+- **USB webcam (`CAMERA_URL=0`) in the container**: works only on a Linux host with device
+  passthrough (`devices: /dev/video0` + `group_add: video`, commented in compose by default).
+  Docker Desktop (Windows/macOS) cannot pass USB through — run the backend natively for webcam,
+  or use RTSP/file/synthetic in the container. A source that fails to open logs a clear ERROR and
+  the app keeps running (no frames; snapshot → 503) rather than dying silently.
