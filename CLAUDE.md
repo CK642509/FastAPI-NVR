@@ -4,10 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Phase 1 (capture + segmented recording) and the Phase 2 backend (MJPEG streaming +
-control API + DB schema) are implemented.** Not yet done: the Phase 2 frontend (Vue3) and full
-compose/Caddy wiring (`caddy/Caddyfile` is still an empty placeholder), plus Phases 3–5. The
-authoritative spec for what to build lives in `docs/`:
+**Phase 2 is complete** end-to-end: Phase 1 capture + segmented recording, the Phase 2 backend
+(MJPEG streaming + control API + DB schema), the Phase 2 frontend (Vue 3 + Vuetify live view, in
+the sibling `FastAPI-NVR-Web/` worktree), and the full compose/Caddy wiring (`caddy/Caddyfile` +
+`docker-compose.yaml`). `docker compose up --build` brings up Caddy + api-server + db; Caddy
+serves the frontend, proxies `/api` + `/health`, and serves `/media/*` recordings. Not yet done:
+Phases 3–5, and the `web` submodule still points at an **older** frontend build — publish the
+current UI with `FastAPI-NVR-Web/scripts/build-image.ps1` then `git submodule update --remote web`.
+The authoritative spec for what to build lives in `docs/`:
 
 - `docs/proposal.md` — the proposal: tech stack table, system architecture diagram, and the
   dated Phase 1–5 timeline.
@@ -112,9 +116,9 @@ running `VideoPipeline` dynamically.
 
 ## Known caveats
 
-- `docker-compose.yaml` mounts the frontend from `./web-submodule/dist`, but the submodule is
-  actually at `web` (per `.gitmodules`). Verify/reconcile this path before relying on the Caddy
-  static mount. (Caddy is not wired to the FastAPI backend yet — that's Phase 2's later chunk.)
+- Caddy serves the frontend from the `web` submodule mounted at `./web:/usr/share/caddy` (the
+  build-branch artifacts live at the submodule root — `index.html` + `assets/`, no `dist/` subdir).
+  The old `./web-submodule/dist` mount path was wrong and has been corrected.
 - The `db` service uses `postgres:18`, whose image requires the data volume mounted at
   `/var/lib/postgresql` (not `/var/lib/postgresql/data`, which crash-loops). Already fixed in
   compose; keep it that way.

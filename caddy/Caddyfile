@@ -1,0 +1,30 @@
+# FastAPI-NVR Caddy 設定（Phase 2 容器化）
+# 瀏覽器 → Caddy :80 → 前端靜態檔 / FastAPI /api / 錄影檔 /media
+#
+# 本機開發用 http :80；正式環境可改成你的網域以自動取得 TLS。
+
+:80 {
+	# 1) 錄影檔直讀：由 Caddy 直接送，不經過 FastAPI（效能較佳）
+	#    /media/foo.mp4 → /var/www/media/foo.mp4
+	handle_path /media/* {
+		root * /var/www/media
+		file_server
+	}
+
+	# 2) API + 健康檢查：反向代理到後端；flush_interval -1 讓 MJPEG 串流即時送出不緩衝
+	@backend path /api/* /health /health/*
+	handle @backend {
+		reverse_proxy api-server:8000 {
+			flush_interval -1
+		}
+	}
+
+	# 3) 前端 SPA：靜態檔 + History Mode fallback（找不到檔就回 index.html）
+	handle {
+		root * /usr/share/caddy
+		try_files {path} /index.html
+		file_server
+	}
+
+	encode gzip
+}

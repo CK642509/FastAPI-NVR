@@ -197,21 +197,33 @@ cv2 擷取、JPEG 編碼與 PyAV 編碼皆為**同步阻塞**操作，故擷取�
 
 ---
 
-## Docker
+## Docker（全 compose）
 
-後端映像由 `./backend` 建置（compose 服務 `api-server`，以 uvicorn 提供 API）。需於
-**專案根目錄**準備 `.env`（見根目錄 `.env.example`，含 `DB_USER` / `DB_PASSWORD`）。
+Phase 2 已完成全容器化：`docker compose up --build` 一次起 **Caddy + api-server + db**。需於
+**專案根目錄**準備 `.env`（見根目錄 `.env.example`，含 `DB_USER` / `DB_PASSWORD` 與影像來源）。
 
 ```powershell
 # 於專案根目錄（FastAPI-NVR/）
-docker compose up -d db                 # 只起 DB（跑 alembic / /health/db 用）
-docker compose up --build api-server    # 起後端（連到 db）
+docker compose up --build              # Caddy(:80) + api-server + db 全部起來
+# DB migration（首次或 schema 有變時，於容器內執行）
+docker compose exec api-server alembic upgrade head
 ```
 
-- `api-server` 對外開 `8000`，DB `5432`（開發期直連用）。
-- 容器內錄影輸出 `/app/recordings` → host `storage/recordings`。
-- `api-server` 的 `DATABASE_URL` 由 compose 以 `DB_USER`/`DB_PASSWORD` 組出，指向 `db`。
-- DB migration 目前需手動執行（`uv run alembic upgrade head`，或於容器內執行）。
+存取（全部經由 Caddy `:80` 同源）：
 
-> 注意：`postgres:18` 映像的資料卷需掛在 `/var/lib/postgresql`（非 `.../data`），compose
-> 已修正。完整 Caddy 反向代理 + 前端靜態檔屬 Phase 2 後段，尚未接線。
+| URL | 內容 |
+|---|---|
+| `http://localhost/` | 前端（Vue SPA，由 `web` submodule 提供） |
+| `http://localhost/api/...` | 反向代理到 api-server（含 MJPEG 串流） |
+| `http://localhost/media/<file>.mp4` | Caddy 直讀錄影檔 |
+| `http://localhost/health`、`/health/db` | 健康檢查 |
+
+- 服務間：Caddy 反代到 `api-server:8000`；MJPEG 用 `flush_interval -1` 即時送出。
+- 前端靜態檔由 `web` submodule（build 分支，產物在根目錄）掛載到 Caddy。
+- 容器內錄影輸出 `/app/recordings` → host `storage/recordings`，Caddy 以 `/media/*` 直讀。
+- `api-server` 的 `DATABASE_URL` 由 compose 以 `DB_USER`/`DB_PASSWORD` 組出，指向 `db`。
+- 開發期 `api-server:8000`、`db:5432` 仍對 host 開放，方便直連 / 跑 alembic。
+
+> 注意：`postgres:18` 映像的資料卷需掛在 `/var/lib/postgresql`（非 `.../data`），compose 已修正。
+> `web` submodule 目前是**舊版**前端 build；要讓 Caddy 提供最新 Phase 2 UI，需先用
+> `FastAPI-NVR-Web/scripts/build-image.ps1` 發佈到 build 分支，再 `git submodule update --remote web`。

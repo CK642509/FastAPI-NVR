@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 反向代理與前端靜態檔
   caddy:
@@ -10,8 +8,9 @@ services:
       - "443:443"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile
-      - ./web-submodule/dist:/usr/share/caddy  # 掛載前端靜態檔
-      - ./storage/recordings:/var/www/media    # 讓 Caddy 也能直接讀取影片檔（效能更好）
+      # web submodule（build 分支）的構建產物直接放在根目錄（index.html / assets/）
+      - ./web:/usr/share/caddy:ro              # 掛載前端靜態檔
+      - ./storage/recordings:/var/www/media:ro # 讓 Caddy 也能直接讀取影片檔（效能更好）
     depends_on:
       - api-server
     restart: always
