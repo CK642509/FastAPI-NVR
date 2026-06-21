@@ -4,9 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Phase 1 (Core — capture + segmented recording) is implemented.** Phases 2–5 are not yet
-started; `caddy/Caddyfile` is still an empty placeholder. The authoritative spec for what to
-build lives in `docs/`:
+**Phase 1 (capture + segmented recording) and the Phase 2 backend (MJPEG streaming +
+control API + DB schema) are implemented.** Not yet done: the Phase 2 frontend (Vue3) and full
+compose/Caddy wiring (`caddy/Caddyfile` is still an empty placeholder), plus Phases 3–5. The
+authoritative spec for what to build lives in `docs/`:
 
 - `docs/proposal.md` — the proposal: tech stack table, system architecture diagram, and the
   dated Phase 1–5 timeline.
@@ -18,33 +19,37 @@ build lives in `docs/`:
 When implementing a feature, find its phase in `docs/ooa.md` first — the class structure,
 abstract base classes, and design patterns are already specified there.
 
-### Backend (Phase 1)
+### Backend
 
-The backend is a **pure-asyncio app** (no FastAPI/API yet — that arrives in Phase 2). Code lives
-in `backend/app/`, following the Phase 1 design contract (`Camera` / `VideoPipeline` /
-`VideoWriter`):
+A **FastAPI app** (Phase 2). Code lives in `backend/app/`, following the `docs/ooa.md` design
+contract. Dependencies are managed with **uv** (`pyproject.toml` + `uv.lock`); run details and
+the full env-var table are in `backend/README.md`.
 
-- `app/config.py` — Pydantic v2 `Settings`, all config via `.env` (see `backend/.env.example`).
-- `app/camera.py` — `Camera` dataclass.
+Capture / recording (Phase 1):
 - `app/sources.py` — `FrameSource` protocol + `OpenCVSource` (webcam / RTSP / video file, via
   `cv2.VideoCapture`) + `SyntheticSource` (generated frames, for testing without a camera).
+  `CAMERA_URL` selects: digit (`0`) = webcam, `rtsp://…` = RTSP, a path = video file (loops if
+  `CAMERA_LOOP`), `synthetic` = generated.
 - `app/video_writer.py` — `VideoWriter`, PyAV → H.264 mp4.
-- `app/pipeline.py` — `VideoPipeline`, capture loop + segmentation (segment boundary by frame
-  count = `fps × segment_seconds`).
-- `app/main.py` — asyncio entry point; the blocking capture loop runs in a `ThreadPoolExecutor`
-  (cv2/PyAV are synchronous), with SIGINT/SIGTERM graceful shutdown.
+- `app/pipeline.py` — `VideoPipeline`. The capture loop **fans out** each frame to (a) the
+  `MJPEGStreamer` (JPEG-encoded) and (b) the `VideoWriter` when recording is on. Recording is a
+  thread-safe toggle (`start_recording`/`stop_recording`); segment boundary = `fps × segment_seconds`
+  frames. The blocking loop runs in a `ThreadPoolExecutor` (cv2/PyAV are synchronous).
 
-Dependencies are managed with **uv** (`pyproject.toml` + `uv.lock`). `CAMERA_URL` selects the
-source: a digit (`0`) = webcam index, `rtsp://…` = RTSP, a path = video file (loops if
-`CAMERA_LOOP`), `synthetic` = generated frames. Recordings default to `recordings/` (→ container
-`/app/recordings` → host `storage/recordings`).
+Streaming + API (Phase 2):
+- `app/streaming.py` — `MJPEGStreamer`; capture thread pushes frames via
+  `loop.call_soon_threadsafe`, each HTTP client gets a drop-old queue.
+- `app/routers/` — `StreamRouter` (`/api/cameras/{id}/stream`, `/snapshot`) and `RecordingRouter`
+  (`/recording/{start,stop,status}`). `app.state.pipelines` is `{camera_id: VideoPipeline}`
+  (single camera, id `1`, in Phase 2).
+- `app/server.py` — `create_app()` + `lifespan` that starts the pipeline in the background on
+  startup and stops it on shutdown. `app/main.py` launches uvicorn.
 
-Run Phase 1 locally:
-```powershell
-cd backend
-copy .env.example .env   # defaults to CAMERA_URL=synthetic (no camera needed)
-uv run python -m app.main # Ctrl+C to stop
-```
+Database (Phase 2 — **schema only**, for Phase 3):
+- `app/db/` — SQLAlchemy 2.0 **async** engine/session + models (`cameras`, `events`,
+  `notification_config`). Not yet used by runtime logic; the running camera still comes from `.env`.
+- `alembic/` + `alembic.ini` — migrations. Apply with `uv run alembic upgrade head` (needs the
+  `db` service up). Note: `alembic.ini` must stay ASCII (Alembic reads it with the OS locale codec).
 
 ## Repository layout
 
@@ -109,4 +114,9 @@ running `VideoPipeline` dynamically.
 
 - `docker-compose.yaml` mounts the frontend from `./web-submodule/dist`, but the submodule is
   actually at `web` (per `.gitmodules`). Verify/reconcile this path before relying on the Caddy
-  static mount.
+  static mount. (Caddy is not wired to the FastAPI backend yet — that's Phase 2's later chunk.)
+- The `db` service uses `postgres:18`, whose image requires the data volume mounted at
+  `/var/lib/postgresql` (not `/var/lib/postgresql/data`, which crash-loops). Already fixed in
+  compose; keep it that way.
+- DB migrations are **not** auto-run by the container; apply them manually with
+  `uv run alembic upgrade head` after the `db` service is healthy.

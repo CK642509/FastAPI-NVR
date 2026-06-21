@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # 反向代理與前端靜態檔
+  caddy:
+    image: caddy:latest
+    container_name: nvr-gateway
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./web-submodule/dist:/usr/share/caddy  # 掛載前端靜態檔
+      - ./storage/recordings:/var/www/media    # 讓 Caddy 也能直接讀取影片檔（效能更好）
+    depends_on:
+      - api-server
+    restart: always
+
+  # 後端核心
+  api-server:
+    build: ./backend
+    container_name: nvr-core
+    env_file: .env
+    environment:
+      # SQLAlchemy async 連線字串，指向同網路的 db 服務
+      DATABASE_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@db:5432/nvr_db
+    ports:
+      - "8000:8000"   # Phase 2 後端開發直連；Phase 2 後段改由 Caddy 反代
+    volumes:
+      - ./storage/recordings:/app/recordings
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+
+  # 資料庫
+  db:
+    image: postgres:18-alpine
+    container_name: nvr-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: nvr_db
+    ports:
+      - "5432:5432"   # 開發期讓 host 可直連（例如從本機跑 alembic）
+    volumes:
+      # postgres:18+ 映像建議掛在 /var/lib/postgresql（非 .../data），否則無法啟動
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d nvr_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: always
+
+volumes:
+  postgres_data:

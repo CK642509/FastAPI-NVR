@@ -18,9 +18,14 @@ ENV UV_COMPILE_BYTECODE=1 \
 COPY pyproject.toml uv.lock* ./
 RUN uv sync --no-dev
 
-# 再複製程式碼
+# 再複製程式碼與 migration
 COPY app ./app
 COPY main.py ./
+COPY alembic.ini ./
+COPY alembic ./alembic
 
-# 持續錄影；以 -m 執行套件進入點
-CMD ["python", "-m", "app.main"]
+EXPOSE 8000
+
+# 以 uvicorn 提供 FastAPI（MJPEG 串流 + 錄影控制 API）
+# DB migration 另行執行：uv run alembic upgrade head
+CMD ["uvicorn", "app.server:app", "--host", "0.0.0.0", "--port", "8000"]
